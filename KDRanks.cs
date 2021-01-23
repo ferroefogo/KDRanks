@@ -1,15 +1,7 @@
-﻿using System.Collections.Generic;
-using Oxide.Game.Rust.Cui;
+﻿using Oxide.Game.Rust.Cui;
 using System;
-using System.Linq;
-using System.Timers;
-using Facepunch;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Oxide.Core;
-using Oxide.Core.Plugins;
+using System.Collections.Generic;
 using System.Data.SQLite;
-using UnityEngine;
 
 namespace Oxide.Plugins
 {
@@ -33,17 +25,11 @@ namespace Oxide.Plugins
         // Kill Count
         // Death Count
         // KD Ratio
-        public class playerInfoDataStruct
-        {
-            public int rank { get; set; }
-            public int bounty { get; set; }
-            public int kills { get; set; }
-            public int deaths { get; set; }
-            public float kdr { get; set; }
-        }
+        Dictionary<UInt64, List<string>> playerInfo = new Dictionary<UInt64, List<string>>();
 
         SQLiteConnection db_conn = new SQLiteConnection(@"Data Source=D:\Desktop\rust server\steamapps\common\rust_dedicated\oxide\plugins\PlayerData.db");
-        void Loaded(){
+        void Loaded()
+        {
             PrintToChat("SWAG");
             db_conn.Open();
 
@@ -65,50 +51,72 @@ namespace Oxide.Plugins
             Puts("OnEntityDeath works!");
             ulong attackerUserID;
             ulong victimUserID;
-            if (entity != null){
+            if (entity != null)
+            {
                 Puts("a");
-                if (entity.gameObject != null) {
+                if (entity.gameObject != null)
+                {
                     Puts("b");
                     // '!' must be before the entity part here for real players, but for testing sake, its removed for scientists.
-                    if ((entity is NPCPlayer)){
+                    if ((entity is NPCPlayer))
+                    {
                         Puts("c");
                         // '!' must NOT be before the entity part here for real players, but for testing sake, its added for scientists.
-                        if (!(entity.lastDamage == Rust.DamageType.Bleeding)){
+                        if (!(entity.lastDamage == Rust.DamageType.Bleeding))
+                        {
                             Puts("d");
-                            if (entity.lastAttacker != null){
-                                Puts("e");
+                            if (entity.lastAttacker != null)
+                            {
+                                // Establish stat counts
+                                int rank;
+                                int bounty;
+                                int kills;
+                                int deaths;
+                                double kdr;
                                 // Get the user that last attacked and award them the kill
                                 attackerUserID = entity.lastAttacker.ToPlayer().userID;
                                 victimUserID = entity.ToPlayer().userID;
-                                Console.WriteLine("no shot");
-
-                                playerInfoDataStruct[] allRecords = null;
 
                                 // Get the current kill count, kdr and rank of the attacker from the database.
-                                string playerInfoString = "SELECT * FROM playerData WHERE playerid = @attackerid LIMIT 1";
-                                SQLiteCommand cmd = new SQLiteCommand(playerInfoString, db_conn);
-                                cmd.Parameters.Add(new SQLiteParameter("@attackerid", Convert.ToInt64(attackerUserID)));
                                 UInt64 useridval = Convert.ToUInt64(attackerUserID);
+
                                 Console.WriteLine(useridval.ToString());
 
-                                var playerInfoList = new List<playerInfoDataStruct>();
+                                string playerDataQuery = "SELECT * FROM playerData WHERE playerid = @attackerid";
+                                var cmd = new SQLiteCommand(playerDataQuery, db_conn);
+                                cmd.Parameters.AddWithValue("@attackerid", useridval);
                                 SQLiteDataReader reader = cmd.ExecuteReader();
-                                while (reader.Read() == true)
-                                {
-                                    Console.WriteLine(reader.Read().ToString(),"\nYOOO?");
-                                    playerInfoList.Add(new playerInfoDataStruct { rank = reader.GetInt32(1), bounty = reader.GetInt32(2), kills = reader.GetInt32(3), deaths = reader.GetInt32(4) , kdr = reader.GetFloat(5)});
-                                }
-                                allRecords = playerInfoList.ToArray();
 
-                                foreach (var item in allRecords)
+                                while (reader.Read())
                                 {
-                                    Console.WriteLine(item.ToString());
+                                    //Console.WriteLine($"{reader.GetInt64(0)} {reader.GetInt32(1)} {reader.GetInt32(2)} {reader.GetInt32(3)} {reader.GetInt32(4)} {reader.GetDouble(5)}");
+                                    playerInfo.Add(useridval, new List<string>());
+                                    playerInfo[useridval].Add(reader.GetInt64(0).ToString());
+                                    playerInfo[useridval].Add(reader.GetInt32(1).ToString());
+                                    playerInfo[useridval].Add(reader.GetInt32(2).ToString());
+                                    playerInfo[useridval].Add(reader.GetInt32(3).ToString());
+                                    playerInfo[useridval].Add(reader.GetInt32(4).ToString());
+                                    playerInfo[useridval].Add(reader.GetDouble(5).ToString());
                                 }
 
+                                foreach (KeyValuePair<UInt64, List<string>> kvp in playerInfo)
+                                {
+                                    List<string> withinList = kvp.Value;
+                                    Console.WriteLine("Key {0}, contains {1} values:", kvp.Key, withinList.Count);
+                                    rank = Int32.Parse(withinList[0]);
+                                    bounty = Int32.Parse(withinList[1]);
+                                    kills = Int32.Parse(withinList[2]);
+                                    deaths = Int32.Parse(withinList[3]);
+                                    kdr = Double.Parse(withinList[4]);
+                                }
+
+                                // Update the attacker stats.
+                                int upKills = kills + 1;
 
 
 
                                 //SQLiteCommand updatePlayerData = new SQLiteCommand(db_conn);
+
                                 // Update the Kill/Death Counter in the database for the respective parties.
                                 //updatePlayerData.CommandText = "UPDATE playerData SET kills = @killCount, kdratio = @kdr WHERE playerid = @id";
                                 //updatePlayerData.Parameters.AddWithValue("@killCount", killCount);
@@ -163,7 +171,8 @@ namespace Oxide.Plugins
 
             }, "Hud", "Position_panel");
 
-            container.Add(new CuiLabel {
+            container.Add(new CuiLabel
+            {
                 Text ={
 
                     //Text = playerData.ToString(),
